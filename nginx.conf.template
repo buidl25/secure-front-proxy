@@ -46,8 +46,15 @@ http {
       return 200 '<html><head><title>DNS Resolution Error</title></head><body><h1>DNS Resolution Error</h1><p>The server is unable to resolve the hostname for the backend service. This may be due to using an internal Railway domain that is not accessible.</p><p>Please check your PROXY_PASS environment variable and consider using a public URL instead.</p><p>Current PROXY_PASS: ${PROXY_PASS}</p></body></html>';
     }
     
-    # Перенаправление на страницу с информацией о DNS-ошибке при проблемах с разрешением имени
+    # Страница с информацией о проблемах с SSL
+    location = /ssl-error.html {
+      add_header Content-Type text/html;
+      return 200 '<html><head><title>SSL Connection Error</title></head><body><h1>SSL Connection Error</h1><p>The server encountered an SSL error when connecting to the backend service.</p><p>Possible solutions:</p><ul><li>Set USE_HTTP_BACKEND=true to use HTTP instead of HTTPS</li><li>Check if the backend service supports HTTPS</li><li>Check if the SSL certificate of the backend service is valid</li></ul><p>Current PROXY_PASS: ${PROXY_PASS}</p></body></html>';
+    }
+    
+    # Перенаправление на страницы с информацией об ошибках
     error_page 502 /dns-error.html;
+    error_page 496 497 /ssl-error.html;
     
     # Страница статуса для отладки
     location /nginx-status {
@@ -86,6 +93,12 @@ http {
       proxy_read_timeout 120s;
       proxy_buffers 8 32k;
       proxy_buffer_size 64k;
+      
+      # Настройки SSL для подключения к бэкенду
+      proxy_ssl_server_name on;
+      proxy_ssl_protocols TLSv1.2 TLSv1.3;
+      proxy_ssl_ciphers HIGH:!aNULL:!MD5;
+      proxy_ssl_verify off; # Отключаем проверку SSL-сертификата для совместимости
       
       # Используем переменную для динамического разрешения имени хоста
       set $upstream ${PROXY_PASS};

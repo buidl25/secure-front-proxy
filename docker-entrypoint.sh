@@ -17,6 +17,17 @@ echo "USERNAME: $USERNAME"
 HOST=$(echo $PROXY_PASS | sed -E 's/https?:\/\///' | sed -E 's/:.*//')
 echo "Target host: $HOST"
 
+# Проверяем, нужно ли использовать HTTP вместо HTTPS
+if [ "$USE_HTTP_BACKEND" = "true" ]; then
+    echo "\n=== Using HTTP instead of HTTPS for backend ==="
+    # Если URL содержит https://, заменяем на http://
+    if echo "$PROXY_PASS" | grep -q "^https://"; then
+        HTTP_URL=$(echo "$PROXY_PASS" | sed 's/^https:/http:/')
+        echo "Converting $PROXY_PASS to $HTTP_URL"
+        PROXY_PASS="$HTTP_URL"
+    fi
+fi
+
 # Проверяем, является ли хост внутренним доменом Railway
 if echo "$HOST" | grep -q "\.railway\.internal$"; then
     echo "\n=== WARNING: Internal Railway domain detected ==="

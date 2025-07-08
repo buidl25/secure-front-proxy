@@ -5,6 +5,7 @@ ARG PROXY_PASS=https://delta-neutral-lp-bot-dev.up.railway.app
 ARG PORT=80
 ARG USERNAME=user
 ARG PASSWORD=password
+ARG USE_HTTP_BACKEND=false
 
 # Устанавливаем необходимые инструменты для отладки и проверки сети
 RUN apk update && \
@@ -22,6 +23,7 @@ ENV PROXY_PASS=$PROXY_PASS
 ENV PORT=$PORT
 ENV USERNAME=$USERNAME
 ENV PASSWORD=$PASSWORD
+ENV USE_HTTP_BACKEND=$USE_HTTP_BACKEND
 
 # Создаем директории для логов
 RUN mkdir -p /var/log/nginx
