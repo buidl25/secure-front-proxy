@@ -1,7 +1,7 @@
 FROM nginx:alpine AS runtime
 
 # Устанавливаем аргументы сборки с публичным URL по умолчанию
-ARG PROXY_PASS=https://delta-neutral-lp-bot-dev.up.railway.app
+ARG PROXY_PASS=https://delta-neutral-lp-bot-dev-production.up.railway.app
 ARG PORT=80
 ARG USERNAME=user
 ARG PASSWORD=password

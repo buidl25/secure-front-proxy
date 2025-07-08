@@ -31,9 +31,8 @@ http {
   access_log /var/log/nginx/access.log main;
   error_log /var/log/nginx/error.log warn;
   
-  # Настройки DNS-резолвера
-  # Используем только публичные DNS-серверы для стабильности
-  resolver 1.1.1.1 8.8.8.8 valid=10s;
+  # Настройки DNS-резолвера для правильного разрешения имен хостов
+  resolver 8.8.8.8 8.8.4.4 1.1.1.1 valid=30s ipv6=off;
   resolver_timeout 5s;
 
   # Основной сервер
@@ -95,7 +94,7 @@ http {
     # Прямой доступ к целевому сервису без аутентификации
     location /direct/ {
       # Заголовки прокси - используем хост целевого сервиса
-      set $target_host "delta-neutral-lp-bot-dev.up.railway.app";
+      set $target_host "delta-neutral-lp-bot-dev-production.up.railway.app";
       proxy_set_header Host $target_host;
       proxy_set_header X-Real-IP $remote_addr;
       # Ограничиваем размер X-Forwarded-For, используя только последний IP
@@ -109,10 +108,10 @@ http {
       proxy_set_header Upgrade $http_upgrade;
       proxy_set_header Connection "upgrade";
       
-      # Таймауты и буферы - минимальные значения для уменьшения размера заголовков
-      proxy_connect_timeout 60s;
-      proxy_send_timeout 60s;
-      proxy_read_timeout 60s;
+      # Настройки таймаутов
+      proxy_connect_timeout 30s;
+      proxy_send_timeout 30s;
+      proxy_read_timeout 30s;
       
       # Отключаем буферизацию для уменьшения размера заголовков
       proxy_buffering off;
@@ -172,10 +171,16 @@ http {
       proxy_ssl_protocols TLSv1.2 TLSv1.3;
       proxy_ssl_ciphers HIGH:!aNULL:!MD5;
       proxy_ssl_verify off; # Отключаем проверку SSL-сертификата для совместимости
+      proxy_ssl_session_reuse on;
       
       # Используем переменную для динамического разрешения имени хоста
       set $upstream ${PROXY_PASS};
       proxy_pass $upstream;
+      
+      # Настройки повторных попыток и таймаутов
+      proxy_next_upstream error timeout http_502 http_503 http_504;
+      proxy_next_upstream_tries 3;
+      proxy_next_upstream_timeout 10s;
       
       # Обработка ошибок
       proxy_intercept_errors on;
