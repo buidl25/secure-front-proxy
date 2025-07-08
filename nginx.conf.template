@@ -14,12 +14,13 @@ http {
   keepalive_timeout  65;
   types_hash_max_size 2048;
   
-  # Увеличиваем размер буфера для заголовков
-  large_client_header_buffers 8 128k;  # Увеличиваем количество и размер буферов
-  client_header_buffer_size 32k;      # Увеличиваем размер буфера заголовков
-  client_max_body_size 20M;          # Максимальный размер тела запроса
-  client_body_buffer_size 128k;      # Размер буфера для тела запроса
-  server_tokens off;                 # Скрываем версию Nginx
+  # Увеличиваем размер буфера для заголовков - максимальные значения
+  large_client_header_buffers 16 512k;  # Максимально увеличиваем количество и размер буферов
+  client_header_buffer_size 64k;       # Увеличиваем размер буфера заголовков
+  client_max_body_size 50M;           # Максимальный размер тела запроса
+  client_body_buffer_size 256k;       # Размер буфера для тела запроса
+  client_header_timeout 60s;          # Увеличиваем таймаут для заголовков
+  server_tokens off;                  # Скрываем версию Nginx
   
   # Настройки логирования
   log_format main '$remote_addr - $remote_user [$time_local] "$request" '
@@ -57,22 +58,36 @@ http {
       return 200 '<html><head><title>SSL Connection Error</title></head><body><h1>SSL Connection Error</h1><p>The server encountered an SSL error when connecting to the backend service.</p><p>Possible solutions:</p><ul><li>Set USE_HTTP_BACKEND=true to use HTTP instead of HTTPS</li><li>Check if the backend service supports HTTPS</li><li>Check if the SSL certificate of the backend service is valid</li></ul><p>Current PROXY_PASS: ${PROXY_PASS}</p></body></html>';
     }
     
+    # Страница с информацией о слишком больших заголовках
+    location = /header-error.html {
+      add_header Content-Type text/html;
+      return 200 '<html><head><title>Request Header Too Large</title></head><body><h1>Request Header Too Large</h1><p>The server cannot process the request because the header fields are too large.</p><p>Possible solutions:</p><ul><li>Use a direct connection without authentication</li><li>Reduce the size of cookies or other headers</li><li>Try using a different browser or clearing cookies</li></ul></body></html>';
+    }
+    
     # Перенаправление на страницы с информацией об ошибках
     error_page 502 /dns-error.html;
     error_page 496 497 /ssl-error.html;
+    error_page 431 400 /header-error.html;
     
     # Страница статуса для отладки
     location /nginx-status {
-      stub_status on;
-      auth_basic "Restricted";
+      auth_basic "Restricted Area";
       auth_basic_user_file /etc/nginx/.htpasswd;
+      stub_status on;
       access_log off;
     }
     
-    # Страница проверки работоспособности
+    # Страница проверки здоровья - без аутентификации
     location /health {
       access_log off;
       return 200 "OK";
+    }
+    
+    # Публичный эндпоинт для проверки доступности без аутентификации
+    location /public-access {
+      access_log off;
+      add_header Content-Type text/html;
+      return 200 '<html><head><title>Public Access</title></head><body><h1>Public Access Endpoint</h1><p>This endpoint is accessible without authentication.</p><p>Current time: $time_local</p><p>Server: $hostname</p></body></html>';
     }
     
     # Основной прокси-обработчик
@@ -92,18 +107,22 @@ http {
       proxy_set_header Upgrade $http_upgrade;
       proxy_set_header Connection "upgrade";
       
-      # Таймауты и буферы
-      proxy_connect_timeout 120s;
-      proxy_send_timeout 120s;
-      proxy_read_timeout 120s;
-      proxy_buffers 16 64k;
-      proxy_buffer_size 128k;
-      proxy_busy_buffers_size 256k;
-      proxy_temp_file_write_size 256k;
+      # Таймауты и буферы - максимальные значения
+      proxy_connect_timeout 300s;
+      proxy_send_timeout 300s;
+      proxy_read_timeout 300s;
+      proxy_buffers 32 128k;
+      proxy_buffer_size 256k;
+      proxy_busy_buffers_size 512k;
+      proxy_temp_file_write_size 512k;
       
-      # Увеличиваем размер буфера для заголовков при проксировании
-      proxy_headers_hash_max_size 1024;
-      proxy_headers_hash_bucket_size 128;
+      # Максимальные размеры буфера для заголовков при проксировании
+      proxy_headers_hash_max_size 4096;
+      proxy_headers_hash_bucket_size 512;
+      
+      # Отключаем ограничения на размер заголовков
+      proxy_request_buffering off;
+      proxy_ignore_client_abort on;
       
       # Настройки SSL для подключения к бэкенду
       proxy_ssl_server_name on;
