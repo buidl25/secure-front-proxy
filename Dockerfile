@@ -1,18 +1,30 @@
 FROM nginx:alpine AS runtime
 
-ARG PROXY_PASS=http://delta-neutral-lp-bot-dev.railway.internal
-ARG PORT=4000
+# Устанавливаем аргументы сборки с публичным URL по умолчанию
+ARG PROXY_PASS=https://delta-neutral-lp-bot-dev.up.railway.app
+ARG PORT=80
 ARG USERNAME=user
 ARG PASSWORD=password
 
 # Устанавливаем необходимые инструменты для отладки и проверки сети
-RUN apk add --no-cache openssl iputils curl bind-tools
+RUN apk update && \
+    apk add --no-cache \
+    openssl \
+    iputils \
+    curl \
+    bind-tools \
+    bash \
+    ca-certificates \
+    tzdata
 
 # Настраиваем переменные окружения
 ENV PROXY_PASS=$PROXY_PASS
 ENV PORT=$PORT
 ENV USERNAME=$USERNAME
 ENV PASSWORD=$PASSWORD
+
+# Создаем директории для логов
+RUN mkdir -p /var/log/nginx
 
 # Копируем файлы конфигурации
 COPY ./nginx.conf.template /etc/nginx/nginx.conf.template
@@ -23,8 +35,10 @@ COPY ./docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /etc/nginx/gen_passwd.sh
 RUN chmod +x /docker-entrypoint.sh
 
-# Добавляем настройки для DNS-резолвера
-RUN echo "resolver 1.1.1.1 ipv6=off;" > /etc/nginx/conf.d/resolver.conf
+# Создаем страницу с ошибкой для отображения при проблемах
+RUN echo '<html><head><title>Service Temporarily Unavailable</title></head><body><h1>Service Temporarily Unavailable</h1><p>The server is temporarily unable to service your request due to maintenance downtime or capacity problems. Please try again later.</p></body></html>' > /usr/share/nginx/html/50x.html
+
+# Открываем порт
 EXPOSE ${PORT}
 
 # Устанавливаем точку входа
