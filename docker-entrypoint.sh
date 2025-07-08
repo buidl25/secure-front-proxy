@@ -38,9 +38,10 @@ nslookup $HOST || echo "nslookup failed for $HOST"
 echo "\nTesting with dig:"
 dig $HOST || echo "dig failed for $HOST"
 
-# Проверяем с помощью dig с указанием внутреннего DNS Railway
-echo "\nTesting with dig using Railway internal DNS:"
-dig @fd12::10 $HOST || echo "dig with Railway DNS failed for $HOST"
+# Проверяем с помощью dig с указанием публичных DNS
+echo "\nTesting with dig using public DNS:"
+dig @1.1.1.1 $HOST || echo "dig with Cloudflare DNS failed for $HOST"
+dig @8.8.8.8 $HOST || echo "dig with Google DNS failed for $HOST"
 
 # Проверяем с помощью getent
 echo "\nTesting with getent hosts:"
@@ -61,14 +62,21 @@ echo "\n=== Applying Nginx configuration ==="
 envsubst '$PROXY_PASS $PORT' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 echo "Nginx configuration applied successfully"
 
-# Автоматически исправляем проблемы с IPv6-адресами в конфигурации
-echo "\n=== Fixing IPv6 addresses in Nginx configuration ==="
+# Проверяем конфигурацию Nginx на наличие проблем
+echo "\n=== Checking Nginx configuration for issues ==="
 
-# Исправляем формат IPv6-адресов в конфигурации Nginx
+# Удаляем любые упоминания IPv6-адресов, если они есть
 if grep -q "fd12::10" /etc/nginx/nginx.conf; then
-    echo "Found IPv6 address fd12::10 without brackets, fixing..."
-    sed -i 's/fd12::10/\[fd12::10\]/g' /etc/nginx/nginx.conf
-    echo "Fixed IPv6 addresses in configuration"
+    echo "Found IPv6 address fd12::10 in configuration, removing..."
+    sed -i 's/fd12::10//g' /etc/nginx/nginx.conf
+    echo "Removed IPv6 addresses from configuration"
+fi
+
+# Отключаем поддержку IPv6 в конфигурации
+if grep -q "ipv6=on" /etc/nginx/nginx.conf; then
+    echo "Found ipv6=on in configuration, removing..."
+    sed -i 's/ipv6=on//g' /etc/nginx/nginx.conf
+    echo "Disabled IPv6 support in configuration"
 fi
 
 # Проверяем конфигурацию Nginx
@@ -81,9 +89,9 @@ else
     echo "\nTrying to fix common issues..."
     
     # Дополнительные исправления
-    # Удаляем IPv6-адреса, если они вызывают проблемы
-    echo "Removing problematic IPv6 addresses from configuration..."
-    sed -i 's/\[fd12::10\]//g' /etc/nginx/nginx.conf
+    # Упрощаем конфигурацию резолвера
+    echo "Simplifying resolver configuration..."
+    sed -i 's/resolver .*/resolver 1.1.1.1 8.8.8.8 valid=10s;/g' /etc/nginx/nginx.conf
     
     # Проверяем еще раз
     if nginx -t; then
