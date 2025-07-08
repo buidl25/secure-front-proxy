@@ -62,7 +62,7 @@ git push railway main
 
 Для защиты публичного сервиса используйте полный URL в переменной `PROXY_PASS`:
 
-```
+```env
 PROXY_PASS=https://your-app.up.railway.app
 ```
 
@@ -73,7 +73,7 @@ PROXY_PASS=https://your-app.up.railway.app
 1. Убедитесь, что установлена переменная `ENABLE_ALPINE_PRIVATE_NETWORKING=true`
 2. Используйте внутренний домен в формате `http://service-name.railway.internal`
 
-```
+```env
 PROXY_PASS=http://your-service.railway.internal
 ```
 
