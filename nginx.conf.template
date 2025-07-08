@@ -14,13 +14,15 @@ http {
   keepalive_timeout  65;
   types_hash_max_size 2048;
   
-  # Увеличиваем размер буфера для заголовков - максимальные значения
-  large_client_header_buffers 16 512k;  # Максимально увеличиваем количество и размер буферов
-  client_header_buffer_size 64k;       # Увеличиваем размер буфера заголовков
-  client_max_body_size 50M;           # Максимальный размер тела запроса
-  client_body_buffer_size 256k;       # Размер буфера для тела запроса
-  client_header_timeout 60s;          # Увеличиваем таймаут для заголовков
+  # Экстремальные значения для буферов заголовков - для решения проблемы с 431
+  large_client_header_buffers 32 1024k;  # Максимально увеличиваем количество и размер буферов
+  client_header_buffer_size 128k;       # Увеличиваем размер буфера заголовков
+  client_max_body_size 100M;           # Максимальный размер тела запроса
+  client_body_buffer_size 512k;       # Размер буфера для тела запроса
+  client_header_timeout 120s;          # Увеличиваем таймаут для заголовков
   server_tokens off;                  # Скрываем версию Nginx
+  ignore_invalid_headers off;          # Разрешаем нестандартные заголовки
+  underscores_in_headers on;           # Разрешаем подчеркивания в заголовках
   
   # Настройки логирования
   log_format main '$remote_addr - $remote_user [$time_local] "$request" '
@@ -61,7 +63,7 @@ http {
     # Страница с информацией о слишком больших заголовках
     location = /header-error.html {
       add_header Content-Type text/html;
-      return 200 '<html><head><title>Request Header Too Large</title></head><body><h1>Request Header Too Large</h1><p>The server cannot process the request because the header fields are too large.</p><p>Possible solutions:</p><ul><li>Use a direct connection without authentication</li><li>Reduce the size of cookies or other headers</li><li>Try using a different browser or clearing cookies</li></ul></body></html>';
+      return 200 '<html><head><title>Request Header Too Large</title></head><body><h1>Request Header Too Large</h1><p>The server cannot process the request because the header fields are too large.</p><p>Possible solutions:</p><ul><li>Use a direct connection without authentication: <a href="/direct/">/direct/</a></li><li>Reduce the size of cookies or other headers</li><li>Try using a different browser or clearing cookies</li><li>Try using a terminal command like curl instead of a browser</li></ul></body></html>';
     }
     
     # Перенаправление на страницы с информацией об ошибках
@@ -96,7 +98,9 @@ http {
       set $target_host "delta-neutral-lp-bot-dev.up.railway.app";
       proxy_set_header Host $target_host;
       proxy_set_header X-Real-IP $remote_addr;
-      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      # Ограничиваем размер X-Forwarded-For, используя только последний IP
+      set $x_forwarded_for $remote_addr;
+      proxy_set_header X-Forwarded-For $x_forwarded_for;
       proxy_set_header X-Forwarded-Proto $scheme;
       proxy_set_header X-Nginx-Proxy true;
       
@@ -135,7 +139,9 @@ http {
       # Заголовки прокси
       proxy_set_header Host $host;
       proxy_set_header X-Real-IP $remote_addr;
-      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      # Ограничиваем размер X-Forwarded-For, используя только последний IP
+      set $x_forwarded_for $remote_addr;
+      proxy_set_header X-Forwarded-For $x_forwarded_for;
       proxy_set_header X-Forwarded-Proto $scheme;
       proxy_set_header X-Nginx-Proxy true;
       
