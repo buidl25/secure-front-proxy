@@ -37,7 +37,17 @@ http {
     error_page 500 502 503 504 /50x.html;
     location = /50x.html {
       root /usr/share/nginx/html;
+      internal;
     }
+    
+    # Страница с информацией о проблемах с DNS
+    location = /dns-error.html {
+      add_header Content-Type text/html;
+      return 200 '<html><head><title>DNS Resolution Error</title></head><body><h1>DNS Resolution Error</h1><p>The server is unable to resolve the hostname for the backend service. This may be due to using an internal Railway domain that is not accessible.</p><p>Please check your PROXY_PASS environment variable and consider using a public URL instead.</p><p>Current PROXY_PASS: ${PROXY_PASS}</p></body></html>';
+    }
+    
+    # Перенаправление на страницу с информацией о DNS-ошибке при проблемах с разрешением имени
+    error_page 502 /dns-error.html;
     
     # Страница статуса для отладки
     location /nginx-status {

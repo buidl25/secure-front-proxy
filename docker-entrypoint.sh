@@ -17,6 +17,21 @@ echo "USERNAME: $USERNAME"
 HOST=$(echo $PROXY_PASS | sed -E 's/https?:\/\///' | sed -E 's/:.*//')
 echo "Target host: $HOST"
 
+# Проверяем, является ли хост внутренним доменом Railway
+if echo "$HOST" | grep -q "\.railway\.internal$"; then
+    echo "\n=== WARNING: Internal Railway domain detected ==="
+    echo "Internal Railway domains may not be resolvable. Consider using a public URL instead."
+    
+    # Преобразуем внутренний домен в публичный URL
+    SERVICE_NAME=$(echo "$HOST" | sed -E 's/\.railway\.internal$//')
+    PUBLIC_URL="https://${SERVICE_NAME}.up.railway.app"
+    
+    echo "Attempting to use public URL instead: $PUBLIC_URL"
+    PROXY_PASS="$PUBLIC_URL"
+    HOST=$(echo $PROXY_PASS | sed -E 's/https?:\/\///' | sed -E 's/:.*//')
+    echo "New target host: $HOST"
+fi
+
 # Выводим информацию о сети
 echo "=== Network Information ==="
 echo "DNS Servers:"
