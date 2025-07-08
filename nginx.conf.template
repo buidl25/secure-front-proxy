@@ -5,20 +5,40 @@ events {
 }
 
 http {
+  # Включаем resolver для динамического разрешения имен хостов
+  resolver 1.1.1.1 8.8.8.8 valid=30s ipv6=off;
+  resolver_timeout 5s;
+
   server {
     listen ${PORT};
     server_name _;
 
     location / {
-        auth_basic	"Restricted";
-        auth_basic_user_file	/etc/nginx/.htpasswd;
+        auth_basic "Restricted";
+        auth_basic_user_file /etc/nginx/.htpasswd;
         
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header Host $http_host;
         proxy_set_header X-Nginx-Proxy true;
         proxy_http_version 1.1;
-        proxy_pass ${PROXY_PASS};
+        
+        # Используем переменную для динамического разрешения имени хоста
+        set $upstream ${PROXY_PASS};
+        proxy_pass $upstream;
+        
+        # Увеличиваем таймауты для стабильности соединения
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+    
+    # Добавляем страницу статуса для отладки
+    location /nginx-status {
+        stub_status on;
+        auth_basic "Restricted";
+        auth_basic_user_file /etc/nginx/.htpasswd;
+        access_log off;
     }
   }
 }
