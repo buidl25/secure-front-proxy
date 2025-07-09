@@ -14,6 +14,15 @@ http {
   keepalive_timeout  65;
   types_hash_max_size 2048;
   
+  # Определение upstream серверов с резервированием
+  upstream backend_servers {
+    # Основной сервер
+    server delta-neutral-lp-bot-dev-production.up.railway.app max_fails=3 fail_timeout=30s;
+    
+    # Опция keepalive для поддержания соединений
+    keepalive 32;
+  }
+  
   # Экстремальные значения для буферов заголовков - для решения проблемы с 431
   large_client_header_buffers 32 1024k;  # Максимально увеличиваем количество и размер буферов
   client_header_buffer_size 128k;       # Увеличиваем размер буфера заголовков
@@ -32,8 +41,8 @@ http {
   error_log /var/log/nginx/error.log warn;
   
   # Настройки DNS-резолвера для правильного разрешения имен хостов
-  resolver 8.8.8.8 8.8.4.4 1.1.1.1 valid=30s ipv6=off;
-  resolver_timeout 5s;
+  resolver 8.8.8.8 8.8.4.4 1.1.1.1 valid=10s ipv6=off;
+  resolver_timeout 3s;
 
   # Основной сервер
   server {
@@ -93,9 +102,7 @@ http {
     
     # Прямой доступ к целевому сервису без аутентификации
     location /direct/ {
-      # Заголовки прокси - используем хост целевого сервиса
-      set $target_host "delta-neutral-lp-bot-dev-production.up.railway.app";
-      proxy_set_header Host $target_host;
+      proxy_set_header Host delta-neutral-lp-bot-dev-production.up.railway.app;
       proxy_set_header X-Real-IP $remote_addr;
       # Ограничиваем размер X-Forwarded-For, используя только последний IP
       set $x_forwarded_for $remote_addr;
@@ -108,23 +115,38 @@ http {
       proxy_set_header Upgrade $http_upgrade;
       proxy_set_header Connection "upgrade";
       
-      # Настройки таймаутов
-      proxy_connect_timeout 30s;
-      proxy_send_timeout 30s;
-      proxy_read_timeout 30s;
+      # Таймауты и буферы - оптимизированные значения
+      proxy_connect_timeout 60s;
+      proxy_send_timeout 60s;
+      proxy_read_timeout 60s;
+      proxy_buffers 8 16k;
+      proxy_buffer_size 32k;
+      proxy_busy_buffers_size 64k;
+      proxy_temp_file_write_size 64k;
       
-      # Отключаем буферизацию для уменьшения размера заголовков
-      proxy_buffering off;
-      proxy_request_buffering off;
+      # Максимальные размеры буфера для заголовков при проксировании
+      proxy_headers_hash_max_size 512;
+      proxy_headers_hash_bucket_size 128;
+      
+      # Настройки для более эффективной обработки запросов
+      proxy_request_buffering on;
+      proxy_ignore_client_abort off;
       
       # Настройки SSL для подключения к бэкенду
       proxy_ssl_server_name on;
       proxy_ssl_protocols TLSv1.2 TLSv1.3;
-      proxy_ssl_verify off;
+      proxy_ssl_ciphers HIGH:!aNULL:!MD5;
+      proxy_ssl_verify off; # Отключаем проверку SSL-сертификата для совместимости
+      proxy_ssl_session_reuse on;
       
-      # Удаляем /direct/ из URL и перенаправляем на целевой сервис
+      # Удаляем /direct/ из URL и перенаправляем на upstream серверы
       rewrite ^/direct/(.*) /$1 break;
-      proxy_pass ${PROXY_PASS};
+      proxy_pass https://backend_servers;
+      
+      # Настройки повторных попыток и таймаутов
+      proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+      proxy_next_upstream_tries 5;
+      proxy_next_upstream_timeout 30s;
       
       # Обработка ошибок
       proxy_intercept_errors on;
@@ -136,7 +158,7 @@ http {
       auth_basic_user_file /etc/nginx/.htpasswd;
       
       # Заголовки прокси
-      proxy_set_header Host $host;
+      proxy_set_header Host delta-neutral-lp-bot-dev-production.up.railway.app;
       proxy_set_header X-Real-IP $remote_addr;
       # Ограничиваем размер X-Forwarded-For, используя только последний IP
       set $x_forwarded_for $remote_addr;
@@ -149,22 +171,22 @@ http {
       proxy_set_header Upgrade $http_upgrade;
       proxy_set_header Connection "upgrade";
       
-      # Таймауты и буферы - максимальные значения
-      proxy_connect_timeout 300s;
-      proxy_send_timeout 300s;
-      proxy_read_timeout 300s;
-      proxy_buffers 32 128k;
-      proxy_buffer_size 256k;
-      proxy_busy_buffers_size 512k;
-      proxy_temp_file_write_size 512k;
+      # Таймауты и буферы - оптимизированные значения
+      proxy_connect_timeout 60s;
+      proxy_send_timeout 60s;
+      proxy_read_timeout 60s;
+      proxy_buffers 8 16k;
+      proxy_buffer_size 32k;
+      proxy_busy_buffers_size 64k;
+      proxy_temp_file_write_size 64k;
       
       # Максимальные размеры буфера для заголовков при проксировании
-      proxy_headers_hash_max_size 4096;
-      proxy_headers_hash_bucket_size 512;
+      proxy_headers_hash_max_size 512;
+      proxy_headers_hash_bucket_size 128;
       
-      # Отключаем ограничения на размер заголовков
-      proxy_request_buffering off;
-      proxy_ignore_client_abort on;
+      # Настройки для более эффективной обработки запросов
+      proxy_request_buffering on;
+      proxy_ignore_client_abort off;
       
       # Настройки SSL для подключения к бэкенду
       proxy_ssl_server_name on;
@@ -173,14 +195,13 @@ http {
       proxy_ssl_verify off; # Отключаем проверку SSL-сертификата для совместимости
       proxy_ssl_session_reuse on;
       
-      # Используем переменную для динамического разрешения имени хоста
-      set $upstream ${PROXY_PASS};
-      proxy_pass $upstream;
+      # Используем upstream для проксирования вместо прямого URL
+      proxy_pass https://backend_servers;
       
       # Настройки повторных попыток и таймаутов
       proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
-      proxy_next_upstream_tries 3;
-      proxy_next_upstream_timeout 10s;
+      proxy_next_upstream_tries 5;
+      proxy_next_upstream_timeout 30s;
       
       # Обработка ошибок
       proxy_intercept_errors on;
