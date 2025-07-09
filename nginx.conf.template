@@ -14,13 +14,16 @@ http {
   keepalive_timeout  65;
   types_hash_max_size 2048;
   
-  # Определение upstream серверов с резервированием
-  upstream backend_servers {
-    # Основной сервер
-    server delta-neutral-lp-bot-dev-production.up.railway.app max_fails=3 fail_timeout=30s;
-    
-    # Опция keepalive для поддержания соединений
-    keepalive 32;
+  # Определяем переменные для динамического проксирования
+  map $use_http_backend $backend_protocol {
+    default "https";
+    "true" "http";
+  }
+  
+  # Используем переменные из docker-entrypoint.sh для заголовка Host
+  # Это позволит правильно проксировать запросы
+  map $http_host $backend_host {
+    default "${CLEAN_HOST}";
   }
   
   # Экстремальные значения для буферов заголовков - для решения проблемы с 431
@@ -41,8 +44,8 @@ http {
   error_log /var/log/nginx/error.log warn;
   
   # Настройки DNS-резолвера для правильного разрешения имен хостов
-  resolver 8.8.8.8 8.8.4.4 1.1.1.1 valid=10s ipv6=off;
-  resolver_timeout 3s;
+  resolver 1.1.1.1 8.8.8.8 valid=30s ipv6=off;
+  resolver_timeout 5s;
 
   # Основной сервер
   server {
@@ -102,7 +105,7 @@ http {
     
     # Прямой доступ к целевому сервису без аутентификации
     location /direct/ {
-      proxy_set_header Host delta-neutral-lp-bot-dev-production.up.railway.app;
+      proxy_set_header Host $host;
       proxy_set_header X-Real-IP $remote_addr;
       # Ограничиваем размер X-Forwarded-For, используя только последний IP
       set $x_forwarded_for $remote_addr;
@@ -141,7 +144,10 @@ http {
       
       # Удаляем /direct/ из URL и перенаправляем на upstream серверы
       rewrite ^/direct/(.*) /$1 break;
-      proxy_pass https://backend_servers;
+      
+      # Динамически формируем URL для проксирования
+      # Используем чистый хост без протокола и пути
+      proxy_pass $backend_protocol://${CLEAN_HOST};
       
       # Настройки повторных попыток и таймаутов
       proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
@@ -157,8 +163,8 @@ http {
       auth_basic "Restricted Area";
       auth_basic_user_file /etc/nginx/.htpasswd;
       
-      # Заголовки прокси
-      proxy_set_header Host delta-neutral-lp-bot-dev-production.up.railway.app;
+      # Заголовки прокси - используем извлеченный хост из PROXY_PASS
+      proxy_set_header Host ${CLEAN_HOST};
       proxy_set_header X-Real-IP $remote_addr;
       # Ограничиваем размер X-Forwarded-For, используя только последний IP
       set $x_forwarded_for $remote_addr;
@@ -195,8 +201,9 @@ http {
       proxy_ssl_verify off; # Отключаем проверку SSL-сертификата для совместимости
       proxy_ssl_session_reuse on;
       
-      # Используем upstream для проксирования вместо прямого URL
-      proxy_pass https://backend_servers;
+      # Динамически формируем URL для проксирования
+      # Используем чистый хост без протокола и пути
+      proxy_pass $backend_protocol://${CLEAN_HOST};
       
       # Настройки повторных попыток и таймаутов
       proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;

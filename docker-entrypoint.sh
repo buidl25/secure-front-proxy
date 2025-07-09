@@ -14,8 +14,19 @@ echo "PORT: $PORT"
 echo "USERNAME: $USERNAME"
 
 # Извлекаем хост из PROXY_PASS
-HOST=$(echo $PROXY_PASS | sed -E 's/https?:\/\///' | sed -E 's/:.*//')
+HOST=$(echo $PROXY_PASS | sed -E 's/https?:\/\///' | sed -E 's/:\/.*$//' | sed -E 's/\/.*//')
 echo "Target host: $HOST"
+
+# Извлекаем протокол из PROXY_PASS
+PROTOCOL=$(echo $PROXY_PASS | grep -o "^https\?://" | sed 's/:\/\///')
+echo "Protocol: $PROTOCOL"
+
+# Сохраняем исходный URL для использования в конфигурации
+ORIGINAL_PROXY_PASS=$PROXY_PASS
+
+# Формируем чистый URL без протокола для использования в заголовке Host
+CLEAN_HOST=$HOST
+export CLEAN_HOST
 
 # Проверяем, нужно ли использовать HTTP вместо HTTPS
 if [ "$USE_HTTP_BACKEND" = "true" ]; then
@@ -85,8 +96,33 @@ fi
 
 # Применяем переменные окружения к шаблону конфигурации
 echo "\n=== Applying Nginx configuration ==="
-envsubst '$PROXY_PASS $PORT' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+
+# Создаем переменную use_http_backend для использования в nginx.conf
+if [ "$USE_HTTP_BACKEND" = "true" ] || [ "$PROTOCOL" = "http" ]; then
+    export use_http_backend="true"
+    echo "Using HTTP for backend connections"
+else
+    export use_http_backend="false"
+    echo "Using HTTPS for backend connections"
+fi
+
+# Устанавливаем переменные для использования в конфигурации
+export BACKEND_HOST=$CLEAN_HOST
+
+# Применяем все переменные окружения к шаблону
+envsubst '$PROXY_PASS $PORT $use_http_backend $BACKEND_HOST $CLEAN_HOST' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 echo "Nginx configuration applied successfully"
+
+# Выводим информацию о конфигурации
+echo "\n=== Configuration Summary ==="
+echo "PROXY_PASS: $PROXY_PASS"
+echo "PORT: $PORT"
+echo "HOST: $HOST"
+echo "CLEAN_HOST: $CLEAN_HOST"
+echo "PROTOCOL: $PROTOCOL"
+echo "USE_HTTP_BACKEND: $USE_HTTP_BACKEND"
+echo "use_http_backend (for nginx): $use_http_backend"
+echo "BACKEND_HOST: $BACKEND_HOST"
 
 # Проверяем конфигурацию Nginx на наличие проблем
 echo "\n=== Checking Nginx configuration for issues ==="
